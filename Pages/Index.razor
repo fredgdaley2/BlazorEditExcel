@@ -18,7 +18,7 @@
     <ConditionalDisplay Show="ExcelPgeMdl.DataLoaded == DataLoadState.Loaded">
         <div class="col-4">
             <div class="custom-control custom-switch float-left mt-3 mb-2 ">
-                <input type="checkbox" class="custom-control-input" id="customSwitch1" checked="@(ExcelPgeMdl.SelectAll)" @onchange="AllSelectionHander">
+                <input type="checkbox" class="custom-control-input" id="customSwitch1" checked="@(ExcelPgeMdl.SelectAll)" @onchange="AllSelectionHandler">
                 <label class="custom-control-label" for="customSwitch1">@(ExcelPgeMdl.SelectAll ? "De-Select All" : "Select All")</label>
             </div>
         </div>
@@ -36,8 +36,7 @@
         </div>
     </ConditionalDisplay>
 </div>
-@if (ExcelPgeMdl.DataLoaded == DataLoadState.Loaded)
-{
+<ConditionalDisplay Show="ExcelPgeMdl.DataLoaded == DataLoadState.Loaded">
     <div class="row">
         <div class="col">
             <Table TableItem="UserInfo" Items="@ExcelPgeMdl.Data" @ref="@ExcelPgeMdl.Table" PageSize="@ExcelPgeMdl.GetTablePageSize()" TableRowClass="@(x => x.RowClass)" SelectionType="@(BlazorTable.SelectionType.None)" RowClickAction="RowClick" ShowSearchBar="true">
@@ -70,7 +69,8 @@
             </Table>
         </div>
     </div>
-}
+</ConditionalDisplay>
+
 <ConditionalDisplay Show="ExcelPgeMdl.DataLoaded == DataLoadState.Loading">
     <div class="modal-overlay"><Wave /></div>
 </ConditionalDisplay>
@@ -87,13 +87,13 @@
 {
     FileSelect excelFileSelect;
 
-    public EditExcelPageModel ExcelPgeMdl { get; set; }
+    public EditExcelPageModel<UserInfo> ExcelPgeMdl { get; set; }
 
 
 
     protected override void OnInitialized()
     {
-        ExcelPgeMdl = new EditExcelPageModel();
+        ExcelPgeMdl = new EditExcelPageModel<UserInfo>(6);
     }
 
     public enum DataLoadState
@@ -105,16 +105,27 @@
     }
 
 
-    public class EditExcelPageModel
+    public class EditExcelPageModel<T> where T : ISelectable
     {
         public DataLoadState DataLoaded { get; set; } = DataLoadState.UnInitialized;
         public string SelectedFileName { get; set; } = string.Empty;
-        public List<UserInfo> SelectedItems { get; set; } = new List<UserInfo>();
-        public UserInfo Selected { get; set; }
-        public ITable<UserInfo> Table { get; set; }
+        public List<T> SelectedItems { get; set; } = new List<T>();
+        public T Selected { get; set; }
+        public ITable<T> Table { get; set; }
         public bool SelectAll { get; set; }
+        public int NumberOfColumns { get; set; } = -1;
 
-        public List<UserInfo> Data { get; set; } = null;
+        public EditExcelPageModel(int numberOfColumns)
+        {
+            this.NumberOfColumns = numberOfColumns;
+        }
+
+        public List<T> Data { get; set; } = null;
+
+        public void InitializeData()
+        {
+            this.Data = new List<T>();
+        }
 
         public int GetTablePageSize()
         {
@@ -127,9 +138,57 @@
         {
             return this.Data.Where(d => d.Selected).Count() > 0;
         }
+
+        public void AnyDataLoaded()
+        {
+            if (this.Data.Count == 0)
+            {
+                this.DataLoaded = DataLoadState.Invalid;
+                this.InvalidMessage = $"The spreadsheet did not contain any data.";
+                return;
+            }
+
+            this.DataIsLoaded();
+        }
+
+        public bool NumberOfColumnsExpected(int numberOfColumnsEncountered)
+        {
+            if (numberOfColumnsEncountered == this.NumberOfColumns) return true;
+
+            this.DataLoaded = DataLoadState.Invalid;
+            this.InvalidMessage = $"Number of columns expected {this.NumberOfColumns} encountered {numberOfColumnsEncountered}.";
+
+            return false;
+        }
+
+        public void ExceptionEncountered(int errorRow, Exception ex)
+        {
+            this.DataLoaded = DataLoadState.Invalid;
+            this.InvalidMessage = $"The spreadsheet encounted an error at row {errorRow}. {Environment.NewLine} {ex.Message}";
+        }
+
+        public bool HeaderRow(int rowIndex)
+        {
+            return rowIndex == 0;
+        }
+
+        public void DataIsBeingLoaded()
+        {
+            this.DataLoaded = DataLoadState.Loading;
+        }
+
+        private void DataIsLoaded()
+        {
+            this.DataLoaded = DataLoadState.Loaded;
+        }
     }
 
-    public class UserInfo
+    public interface ISelectable
+    {
+        bool Selected { get; set; }
+    }
+
+    public class UserInfo : ISelectable
     {
         public bool Selected { get; set; }
         public int? Id { get; set; }
@@ -139,7 +198,8 @@
         public string Gender { get; set; }
         public string IpAddress { get; set; }
 
-        public string RowClass { get; set; } = null;
+        public string RowClass { get => this.Selected ? "table-info" : null; }
+
     }
 
 
@@ -153,14 +213,16 @@
 
     async Task SpreadsheetSelectedHandler(SelectedFile[] selectedFiles)
     {
-        ExcelPgeMdl.DataLoaded = DataLoadState.Loading;
+        ExcelPgeMdl.DataIsBeingLoaded();
+
         SpreadsheetInfo.SetLicense("FREE-LIMITED-KEY");
         // example of opening a selected file...
         var selectedFile = selectedFiles[0];
+
         ExcelPgeMdl.SelectedFileName = selectedFile.Name;
 
 
-        ExcelPgeMdl.Data = new List<UserInfo>();
+        ExcelPgeMdl.InitializeData();
 
         using (var fileStream = await excelFileSelect.OpenFileStreamAsync(selectedFile.Name))
         {
@@ -173,14 +235,10 @@
                 try
                 {
 
-                    if (row.AllocatedCells.Count != 6)
-                    {
-                        ExcelPgeMdl.DataLoaded = DataLoadState.Invalid;
-                        ExcelPgeMdl.InvalidMessage = $"Number of columns expected 6 encountered {row.AllocatedCells.Count}.";
-                        return;
-                    }
+                    if (!ExcelPgeMdl.NumberOfColumnsExpected(row.AllocatedCells.Count)) return;
 
-                    if (row.Index == 0) continue;
+                    if (ExcelPgeMdl.HeaderRow(row.Index)) continue;
+
                     ExcelPgeMdl.Data.Add(new UserInfo
                     {
                         Id = (int)row.AllocatedCells[0].Value,
@@ -190,44 +248,36 @@
                         Gender = (string)row.AllocatedCells[4].Value,
                         IpAddress = (string)row.AllocatedCells[5].Value,
                     });
+
                 }
                 catch (Exception ex)
                 {
-                    ExcelPgeMdl.DataLoaded = DataLoadState.Invalid;
-                    ExcelPgeMdl.InvalidMessage = $"The spreadsheet encounted an error at row {row.Index}. {Environment.NewLine} {ex.Message}";
+                    ExcelPgeMdl.ExceptionEncountered(row.Index, ex);
                     return;
 
                 }
             }
         }
 
-        if (ExcelPgeMdl.Data.Count == 0)
-        {
-            ExcelPgeMdl.DataLoaded = DataLoadState.Invalid;
-            ExcelPgeMdl.InvalidMessage = $"The spreadsheet did not contain any data.";
-            return;
-
-        }
-        ExcelPgeMdl.DataLoaded = DataLoadState.Loaded;
-
+        ExcelPgeMdl.AnyDataLoaded();
 
     }
 
     public void RowClick(UserInfo data)
     {
         data.Selected = !data.Selected;
-        data.RowClass = data.Selected ? "table-info" : null;
         StateHasChanged();
     }
 
-    public void AllSelectionHander(ChangeEventArgs eventArgs)
+    public void AllSelectionHandler(ChangeEventArgs eventArgs)
     {
         ExcelPgeMdl.SelectAll = !ExcelPgeMdl.SelectAll;
         ExcelPgeMdl.Data.ForEach(x =>
         {
             x.Selected = ExcelPgeMdl.SelectAll;
-            x.RowClass = x.Selected ? "table-info" : null;
         });
         StateHasChanged();
     }
+
+
 }
