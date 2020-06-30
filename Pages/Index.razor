@@ -93,7 +93,7 @@
 
     protected override void OnInitialized()
     {
-        ExcelPgeMdl = new EditExcelPageModel<UserInfo>(6);
+        ExcelPgeMdl = new EditExcelPageModel<UserInfo>(6, CreateNewRow);
     }
 
     public enum DataLoadState
@@ -104,8 +104,7 @@
         Invalid,
     }
 
-
-    public class EditExcelPageModel<T> where T : ISelectable
+    public class EditExcelPageModel<T> where T : ISelectableRow<T>
     {
         public DataLoadState DataLoaded { get; set; } = DataLoadState.UnInitialized;
         public string SelectedFileName { get; set; } = string.Empty;
@@ -115,9 +114,18 @@
         public bool SelectAll { get; set; }
         public int NumberOfColumns { get; set; } = -1;
 
-        public EditExcelPageModel(int numberOfColumns)
+        private Func<ExcelRow,T> CreateNewRowHandler;
+
+        public EditExcelPageModel(int numberOfColumns, Func<ExcelRow, T> createNewRowCallBack)
         {
             this.NumberOfColumns = numberOfColumns;
+            this.CreateNewRowHandler = createNewRowCallBack;
+        }
+
+
+        public void CallCreateNewRowHandler(ExcelRow excelRow)
+        {
+            this.Data.Add(CreateNewRowHandler(excelRow));
         }
 
         public List<T> Data { get; set; } = null;
@@ -177,18 +185,23 @@
             this.DataLoaded = DataLoadState.Loading;
         }
 
+        public void SelectAllHandler()
+        {
+            this.SelectAll = !this.SelectAll;
+            this.Data.ForEach(x =>
+            {
+                x.Selected = this.SelectAll;
+            });
+        }
+
         private void DataIsLoaded()
         {
             this.DataLoaded = DataLoadState.Loaded;
         }
+
     }
 
-    public interface ISelectable
-    {
-        bool Selected { get; set; }
-    }
-
-    public class UserInfo : ISelectable
+    public class UserInfo : ISelectableRow<UserInfo>
     {
         public bool Selected { get; set; }
         public int? Id { get; set; }
@@ -200,6 +213,37 @@
 
         public string RowClass { get => this.Selected ? "table-info" : null; }
 
+        public void RowClick()
+        {
+            this.Selected = !this.Selected;
+        }
+
+    }
+
+    public UserInfo CreateNewRow(ExcelRow excelRow)
+    {
+        return new UserInfo
+        {
+            Id = (int)excelRow.AllocatedCells[0].Value,
+            FirstName = (string)excelRow.AllocatedCells[1].Value,
+            LastName = (string)excelRow.AllocatedCells[2].Value,
+            EmailAddress = (string)excelRow.AllocatedCells[3].Value,
+            Gender = (string)excelRow.AllocatedCells[4].Value,
+            IpAddress = (string)excelRow.AllocatedCells[5].Value,
+        };
+    }
+
+    public void RowClick(UserInfo data)
+    {
+        data.RowClick();
+        StateHasChanged();
+    }
+
+    public void AllSelectionHandler(ChangeEventArgs eventArgs)
+    {
+
+        ExcelPgeMdl.SelectAllHandler();
+        StateHasChanged();
     }
 
 
@@ -239,15 +283,7 @@
 
                     if (ExcelPgeMdl.HeaderRow(row.Index)) continue;
 
-                    ExcelPgeMdl.Data.Add(new UserInfo
-                    {
-                        Id = (int)row.AllocatedCells[0].Value,
-                        FirstName = (string)row.AllocatedCells[1].Value,
-                        LastName = (string)row.AllocatedCells[2].Value,
-                        EmailAddress = (string)row.AllocatedCells[3].Value,
-                        Gender = (string)row.AllocatedCells[4].Value,
-                        IpAddress = (string)row.AllocatedCells[5].Value,
-                    });
+                    ExcelPgeMdl.CallCreateNewRowHandler(row);
 
                 }
                 catch (Exception ex)
@@ -263,21 +299,6 @@
 
     }
 
-    public void RowClick(UserInfo data)
-    {
-        data.Selected = !data.Selected;
-        StateHasChanged();
-    }
-
-    public void AllSelectionHandler(ChangeEventArgs eventArgs)
-    {
-        ExcelPgeMdl.SelectAll = !ExcelPgeMdl.SelectAll;
-        ExcelPgeMdl.Data.ForEach(x =>
-        {
-            x.Selected = ExcelPgeMdl.SelectAll;
-        });
-        StateHasChanged();
-    }
 
 
 }
