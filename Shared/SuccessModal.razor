@@ -1,0 +1,16 @@
+﻿<ConditionalDisplay Show=@Success>
+    <div class="modal-overlay-success">
+        <div class="text-center">
+            <div class="oi oi-thumb-up text-success"></div>
+            <span class="text-success">@Message</span>
+        </div>
+    </div>
+</ConditionalDisplay>
+
+@code {
+
+    [Parameter]
+    public bool Success { get; set; }
+    [Parameter]
+    public string Message { get; set; }
+}

@@ -1,0 +1,20 @@
+﻿
+<button type="button" class="mt-3 mb-2 btn @(!AnySelected ? "btn-danger" : "btn-success")">
+    @SelectionMessage <span class="badge badge-light">@SelectedCount</span><span> out of </span><span class="badge badge-light">@AvailableCount</span>
+</button>
+
+
+@code {
+
+    [Parameter]
+    public bool AnySelected { get; set; }
+
+    [Parameter]
+    public string SelectionMessage { get; set; }
+
+    [Parameter]
+    public int SelectedCount { get; set; }
+
+    [Parameter]
+    public int AvailableCount { get; set; }
+}
