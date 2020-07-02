@@ -1,0 +1,16 @@
+﻿<ConditionalDisplay Show=@Invalid>
+    <div class="modal-overlay-danger">
+        <div class="text-center">
+            <div class="oi oi-thumb-down text-secondary"></div>
+            <span class="text-secondary">@InvalidMessage</span>
+        </div>
+    </div>
+</ConditionalDisplay>
+
+    @code {
+
+        [Parameter]
+        public bool Invalid { get; set; }
+        [Parameter]
+        public string InvalidMessage { get; set; }
+    }

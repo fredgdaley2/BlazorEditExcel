@@ -1,0 +1,12 @@
+﻿<ConditionalDisplay Show="Loading">
+    <div class="modal-overlay">@ChildContent</div>
+</ConditionalDisplay>
+@code {
+
+    [Parameter]
+    public bool Loading { get; set; }
+
+    [Parameter]
+    public RenderFragment ChildContent { get; set; }
+
+}
